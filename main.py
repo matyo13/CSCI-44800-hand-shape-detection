@@ -33,8 +33,8 @@ def set_points(image, num_points, max_size):
     return points[:num_points]
 
 # Function to draw lines and calculated axes on the image
-def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, extension_length=50):
-    for i, j in finger_line_indices:
+def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, extension_length=200):
+    for idx, (i, j) in enumerate(finger_line_indices):
         p1, p2 = np.array(points[i]), np.array(points[j])
         direction = p2 - p1
         length = np.linalg.norm(direction)
@@ -42,7 +42,7 @@ def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, ext
         start_point = (p1 - unit_vector * extension_length).astype(int)
         end_point = (p2 + unit_vector * extension_length).astype(int)
         cv2.line(image, tuple(start_point), tuple(end_point), (255, 0, 0), 2)
-    
+
     knuckle_start, knuckle_end = np.array(points[knuckle_indices[0]]), np.array(points[knuckle_indices[1]])
     knuckle_direction = knuckle_end - knuckle_start
     knuckle_unit_vector = knuckle_direction / np.linalg.norm(knuckle_direction)
@@ -50,49 +50,88 @@ def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, ext
     knuckle_line_end = (knuckle_end + knuckle_unit_vector * extension_length).astype(int)
     cv2.line(image, tuple(knuckle_line_start), tuple(knuckle_line_end), (0, 0, 255), 2)
 
-    for i, j in finger_line_indices:
+    for idx, (i, j) in enumerate(finger_line_indices):
         p1, p2 = np.array(points[i]), np.array(points[j])
         direction = p2 - p1
         unit_vector = direction / np.linalg.norm(direction)
         perpendicular_vector = np.array([-unit_vector[1], unit_vector[0]])
-        
-        for p in [p1, p2]:
+
+        for k, p in enumerate([p1, p2]):
             axis_start_point = (p - perpendicular_vector * extension_length).astype(int)
             axis_end_point = (p + perpendicular_vector * extension_length).astype(int)
-            cv2.line(image, tuple(axis_start_point), tuple(axis_end_point), (0, 255, 0), 1)
+            cv2.line(image, tuple(axis_start_point), tuple(axis_end_point), (0, 255, 0), 2)
+            if k == 0:  # Label the first perpendicular axis of each feature line vector
+                label_position = ((axis_start_point + axis_end_point) / 2).astype(int)
+                cv2.putText(image, f"F{idx + 1}", tuple(label_position), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
     return image
 
 # Function to calculate perpendicular distances
 def calculate_distances(points, line_indices):
     distances = []
     for i, j in line_indices:
-        p1, p2 = np.array(points[i]), np.array(points[j])
+        p1 = np.append(np.array(points[i]), 0)  # Convert to 3D vector
+        p2 = np.append(np.array(points[j]), 0)  # Convert to 3D vector
         for k in range(len(points)):
             if k != i and k != j:
-                p3 = np.array(points[k])
-                dist = np.abs(np.cross(p2-p1, p1-p3)) / np.linalg.norm(p2-p1)
+                p3 = np.append(np.array(points[k]), 0)  # Convert to 3D vector
+                dist = np.abs(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1)
                 distances.append(dist)
     return distances
+
+# Function to calculate intensity profiles
+def calculate_intensity_profiles(image, points, finger_line_indices, extension_length=200):
+    profiles = []
+    for i, j in finger_line_indices:
+        p1, p2 = np.array(points[i]), np.array(points[j])
+        direction = p2 - p1
+        unit_vector = direction / np.linalg.norm(direction)
+        perpendicular_vector = np.array([-unit_vector[1], unit_vector[0]])
+
+        axis_start_point = (p1 - perpendicular_vector * extension_length).astype(int)
+        axis_end_point = (p1 + perpendicular_vector * extension_length).astype(int)
+        profile = []
+        for t in np.linspace(0, 1, int(np.linalg.norm(axis_end_point - axis_start_point))):
+            pt = (1 - t) * axis_start_point + t * axis_end_point
+            x, y = int(pt[0]), int(pt[1])
+            if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
+                profile.append(image[y, x])
+        profiles.append(np.array(profile))
+    return profiles
 
 # Load hand images
 hand_images = [cv2.imread(f'hand{i}.jpg') for i in range(1, 6)]
 
 # Set points and calculate feature vectors for each image
 feature_vectors = []
-for image in hand_images:
-    points = set_points(image.copy(), 12, 800)  # Keep the number of points to 12
-    finger_line_indices = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11)]
-    knuckle_indices = (10, 11)  # Use points 6 and 7 as knuckle line endpoints
-    image_with_lines_and_axes = draw_lines_and_axes(image.copy(), points, finger_line_indices, knuckle_indices, extension_length=200)
+for image_index in range(len(hand_images)):
+    image = hand_images[image_index]
+    # Convert image to grayscale
+    grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    points = set_points(grayscale_image.copy(), 12, 800)  # Keep the number of points to 12
+    finger_line_indices = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
+    knuckle_indices = (10, 11)  # Changed to points 10 and 11 as knuckle line endpoints
+    image_with_lines_and_axes = draw_lines_and_axes(grayscale_image.copy(), points, finger_line_indices, knuckle_indices, extension_length=200)
     distances = calculate_distances(points, finger_line_indices)
-    feature_vectors.append(distances)
-    plt.imshow(cv2.cvtColor(image_with_lines_and_axes, cv2.COLOR_BGR2RGB))
+    profiles = calculate_intensity_profiles(grayscale_image, points, finger_line_indices)
+    feature_vectors.append(np.array(distances).flatten())  # Flattening the feature vector
+    
+    plt.figure(figsize=(15, 10))
+    plt.subplot(3, 2, 1)
+    plt.imshow(image_with_lines_and_axes, cmap='gray')
+    plt.title(f"Hand Image {image_index + 1} with Lines and Axes")
+    
+    for idx, profile in enumerate(profiles[:5]):  # Limit the number of subplots to 6
+        plt.subplot(3, 2, idx + 2)
+        plt.plot(profile)
+        plt.title(f"Intensity Profile along F{idx + 1}")
+    
+    plt.tight_layout()
     plt.show()
 
 # Calculate pairwise Euclidean distances
 distance_matrix = np.zeros((5, 5))
 for i in range(5):
-    for j in range(i+1, 5):
+    for j in range(i + 1, 5):
         dist = distance.euclidean(feature_vectors[i], feature_vectors[j])
         distance_matrix[i, j] = dist
         distance_matrix[j, i] = dist
