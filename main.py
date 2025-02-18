@@ -26,14 +26,16 @@ def set_points(image, num_points, max_size):
             points.append((int(x * scaling_factor[1]), int(y * scaling_factor[0])))
             cv2.circle(resized_image, (x, y), 5, (0, 0, 255), -1)
             cv2.imshow('image', resized_image)
+
     cv2.imshow('image', resized_image)
     cv2.setMouseCallback('image', click_event)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
     return points[:num_points]
 
 # Function to draw lines and calculated axes on the image
-def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, extension_length=200):
+def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, extension_length=100):
     for idx, (i, j) in enumerate(finger_line_indices):
         p1, p2 = np.array(points[i]), np.array(points[j])
         direction = p2 - p1
@@ -60,27 +62,33 @@ def draw_lines_and_axes(image, points, finger_line_indices, knuckle_indices, ext
             axis_start_point = (p - perpendicular_vector * extension_length).astype(int)
             axis_end_point = (p + perpendicular_vector * extension_length).astype(int)
             cv2.line(image, tuple(axis_start_point), tuple(axis_end_point), (0, 255, 0), 2)
-            if k == 0:  # Label the first perpendicular axis of each feature line vector
+
+            if k == 0:  
                 label_position = ((axis_start_point + axis_end_point) / 2).astype(int)
                 cv2.putText(image, f"F{idx + 1}", tuple(label_position), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+    
     return image
 
 # Function to calculate perpendicular distances
 def calculate_distances(points, line_indices):
     distances = []
+
     for i, j in line_indices:
-        p1 = np.append(np.array(points[i]), 0)  # Convert to 3D vector
-        p2 = np.append(np.array(points[j]), 0)  # Convert to 3D vector
+        p1 = np.append(np.array(points[i]), 0)  
+        p2 = np.append(np.array(points[j]), 0)  
+        
         for k in range(len(points)):
             if k != i and k != j:
-                p3 = np.append(np.array(points[k]), 0)  # Convert to 3D vector
+                p3 = np.append(np.array(points[k]), 0) 
                 dist = np.abs(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1)
                 distances.append(dist)
+
     return distances
 
 # Function to calculate intensity profiles
 def calculate_intensity_profiles(image, points, finger_line_indices, extension_length=200):
     profiles = []
+
     for i, j in finger_line_indices:
         p1, p2 = np.array(points[i]), np.array(points[j])
         direction = p2 - p1
@@ -90,12 +98,15 @@ def calculate_intensity_profiles(image, points, finger_line_indices, extension_l
         axis_start_point = (p1 - perpendicular_vector * extension_length).astype(int)
         axis_end_point = (p1 + perpendicular_vector * extension_length).astype(int)
         profile = []
+
         for t in np.linspace(0, 1, int(np.linalg.norm(axis_end_point - axis_start_point))):
             pt = (1 - t) * axis_start_point + t * axis_end_point
             x, y = int(pt[0]), int(pt[1])
             if 0 <= x < image.shape[1] and 0 <= y < image.shape[0]:
                 profile.append(image[y, x])
+
         profiles.append(np.array(profile))
+
     return profiles
 
 # Load hand images
@@ -105,23 +116,27 @@ hand_images = [cv2.imread(f'hand{i}.jpg') for i in range(1, 6)]
 feature_vectors = []
 for image_index in range(len(hand_images)):
     image = hand_images[image_index]
+
     # Convert image to grayscale
     grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    points = set_points(grayscale_image.copy(), 12, 800)  # Keep the number of points to 12
+    points = set_points(grayscale_image.copy(), 12, 800) 
     finger_line_indices = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
-    knuckle_indices = (10, 11)  # Changed to points 10 and 11 as knuckle line endpoints
+    knuckle_indices = (10, 11) 
+
     image_with_lines_and_axes = draw_lines_and_axes(grayscale_image.copy(), points, finger_line_indices, knuckle_indices, extension_length=200)
     distances = calculate_distances(points, finger_line_indices)
     profiles = calculate_intensity_profiles(grayscale_image, points, finger_line_indices)
-    feature_vectors.append(np.array(distances).flatten())  # Flattening the feature vector
+    feature_vectors.append(np.array(distances).flatten())
+    
+    scaled_image, _, _ = resize_image(image_with_lines_and_axes, 800)
+
+    cv2.imshow(f"Hand Image {image_index + 1} with Lines and Axes", scaled_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     
     plt.figure(figsize=(15, 10))
-    plt.subplot(3, 2, 1)
-    plt.imshow(image_with_lines_and_axes, cmap='gray')
-    plt.title(f"Hand Image {image_index + 1} with Lines and Axes")
-    
-    for idx, profile in enumerate(profiles[:5]):  # Limit the number of subplots to 6
-        plt.subplot(3, 2, idx + 2)
+    for idx, profile in enumerate(profiles[:5]):  
+        plt.subplot(3, 2, idx + 1)
         plt.plot(profile)
         plt.title(f"Intensity Profile along F{idx + 1}")
     
