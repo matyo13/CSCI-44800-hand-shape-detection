@@ -7,7 +7,7 @@
 # Then the program prompts the user to locate the vector points of joints of the hand
 # The order of which the points aree placed is IMPORTANT
 # The points are to be placed in pairs, two on each finger starting from the top joint, and a second point on the lower joint
-# The knuckle line requires two points where it is CRUCIAL for these points to be placed last, as this is how the program detects the fingers vs. the knuckle vector
+# The knuckle line requires two points where it is CRUCIAL for these points to be placed FIRST, as this is how the program detects the fingers vs. the knuckle vector
 # There should be a total of 12 points placed in the end
 
 # The program then takes these points, draws a line between each pair of points
