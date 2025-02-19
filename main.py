@@ -119,13 +119,14 @@ for image_index in range(len(hand_images)):
 
     # Convert image to grayscale
     grayscale_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
     points = set_points(grayscale_image.copy(), 12, 800) 
     finger_line_indices = [(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
     knuckle_indices = (10, 11) 
 
     image_with_lines_and_axes = draw_lines_and_axes(grayscale_image.copy(), points, finger_line_indices, knuckle_indices, extension_length=200)
-    distances = calculate_distances(points, finger_line_indices)
     profiles = calculate_intensity_profiles(grayscale_image, points, finger_line_indices)
+    distances = calculate_distances(points, finger_line_indices)
     feature_vectors.append(np.array(distances).flatten())
     
     scaled_image, _, _ = resize_image(image_with_lines_and_axes, 800)
